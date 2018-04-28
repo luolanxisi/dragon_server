@@ -1,6 +1,6 @@
 "use strict";
 
-const PlayerMgr = require(ROOT_DIR +'model/Player/PlayerMgr').getInst();
+const PlayerMgr = require(ROOT_DIR +'model/player/PlayerMgr').getInst();
 
 
 exports.beforeStartup = function(app, cb) {
