@@ -3,25 +3,19 @@
 const net = require('net');
 const fs = require('fs');
 const child_process = require('child_process');
+const WebSocket = require('ws');
 
 global.ROOT_DIR = __dirname +"/";
 
 const BucketArray = require(ROOT_DIR +'lib/collection/BucketArray.js');
 const RpcCallback = require(ROOT_DIR +'lib/RpcCallback.js');
-const sessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
-const serverMgr = require(ROOT_DIR +'lib/ServerMgr.js').getInst();
 const instruct = require(ROOT_DIR +'lib/ServerInstruct.js').getDict();
 const srvCfg = require(ROOT_DIR +'config/server_config.json');
-const BufferPool = require(ROOT_DIR +'/lib/BufferPool');
-const proto = require(ROOT_DIR +'model/network/Proto').getDict();
 const protoTrans = require(ROOT_DIR +'model/network/Proto').getTransDict();
 const protocolType = require(ROOT_DIR +'model/network/Proto').getTypeDict();
-const TcpPackage = require(ROOT_DIR +'/lib/TcpPackage');
 
-global.BufferPool = BufferPool;
-global.ServerMgr  = serverMgr;
-global.SessionMgr = sessionMgr;
-global.proto      = proto;
+global.ServerMgr = require(ROOT_DIR +'lib/ServerMgr.js').getInst();
+global.proto = require(ROOT_DIR +'model/network/Proto').getDict();
 
 
 // const port = process.argv[2];
@@ -30,7 +24,7 @@ global.proto      = proto;
 // 每个Application代表一个服务端进程
 function Application() {
 	this.rpc = new Rpc();
-	this.srvId = process.argv[2];
+	this.srvId = parseInt(process.argv[2]);
 	let srvType = process.argv[3];
 	let port = process.argv[4];
 	let clientPort = process.argv[5];
@@ -39,13 +33,15 @@ function Application() {
 			aux.error(null, "start rpc server error", err);
 			return;
 		}
+		aux.log(null, 'rpc server ['+ srvType +'] start listen', port);
 		// 
 		if ( clientPort != "undefined" ) {
-			createGameServer(clientPort, function(err, res) {
+			createClientServer(clientPort, function(err, res) {
 				if (err) {
 					aux.error(null, "start rpc server error", err);
 					return;
 				}
+				aux.log(null, 'game server ['+ srvType +'] start listen', clientPort);
 				process.send({ ins: instruct.START_SERVER_FINISH, srvId: App.srvId});
 			});
 		}
@@ -65,16 +61,20 @@ Application.prototype.callRemote = function(procChain, dispatchId, msg, cb) {
 		this.rpc.remoteTypeDict[srvType][remoteName][funcName](null, msg, cb);
 	}
 	else {
-		let cbId = App.rpc.genCb(cb);
-		//
-		let retBuf = BufferPool.createProtoBuffer(proto.SYS_RPC, protocolType.SERVER_REMOTE_CALL);
-		retBuf.writeInt16BE(App.srvId); // srvId修改为本服，cbId不需要修改
-		retBuf.writeInt16BE(cbId);
-		retBuf.writeProtoString(procChain);
-		let jsonStr = JSON.stringify(msg);
-		retBuf.writeProtoString(jsonStr);
-		server.getSocket().write(retBuf.sliceRawBuffer());
+		packReply(msg, protocolType.SERVER_REMOTE_CALL, cb);
+		msg._sr.pc = procChain;
+		server.sendString(JSON.stringify(msg));
 	}
+}
+
+function packReply(msg, type, cb) {
+	let cbId = App.rpc.genCb(cb);
+	msg._sr = {
+		type : type,
+		sid  : App.srvId,
+		cbId : cbId
+	};
+	return msg;
 }
 
 // 分服、回掉处理
@@ -95,8 +95,8 @@ Rpc.prototype.init = function() {
 	// server端rpc调用
 	ServerMgr.regDispatch('web');
 	ServerMgr.regDispatch('connector');
-	ServerMgr.regDispatch('role');
-	ServerMgr.regDispatch('pvp');
+	ServerMgr.regDispatch('player');
+	ServerMgr.regDispatch('map');
 }
 
 Rpc.prototype.readHandle = function(srvType) {
@@ -195,17 +195,6 @@ function fitToServerHandle(clientSocket, session, buf, cmd) {
 }
 
 // ======== 与master进行管道通讯 ========
-// 子进程间通讯回调
-function onData(data) {
-
-}
-
-function onEnd() {
-	
-}
-
-function onError(err) {
-}
 
 process.on('message', (msg) => {
 	// aux.log(null, 'CHILD got message:', msg);
@@ -226,231 +215,154 @@ process.on('message', (msg) => {
 			});
 			break;
 		case instruct.SYNC_SERVER_LIST:
-			serverMgr.fromData(msg.servers);
-			serverMgr.setCurrentServer(App.srvId);
+			ServerMgr.fromData(msg.servers);
+			ServerMgr.setCurrentServer(App.srvId);
 			App.rpc.init();
-			serverMgr.each(function(srv) {
+			ServerMgr.each(function(srv) {
 				if ( srv.id == App.srvId ) {
 					return;
 				}
 				// 与其他socket创建连接
-				const socket = net.createConnection({host:"localhost", port:srv.port}, () => {
-					srv.setSocket(socket);
-					socket.on('data', onData);
-					socket.on('end', onEnd);
-					socket.on('error', onError);
+				const ws = new WebSocket('ws://127.0.0.1:'+ srv.port);
+				ws.on('open', function() {
+					srv.setSocket(ws);
+				});
+				ws.on('message', function(msgStr) { // rpc handle/remote back receive
+					let msg = JSON.parse(msgStr);
+					let sysRpc = msg._sr;
+					delete(msg._sr);
+					App.rpc.runCb(sysRpc.cbId, msg);
 				});
 			});
+			//
+			if (ServerMgr.getCurrentServer().type == "connector") {
+				global.SessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
+			}
 			break;
 	}
 });
 
 
 function createRpcServer(port, cb) {
-	// ======== 与客户端进行socket通讯，以及和其他进程进行rpc通讯 ========
-	const server = net.createServer((client) => {
-		aux.log(null, 'rpc connected');
-
-		client.on('end', () => {
-			aux.log(null, 'client disconnected');
-		});
-
-		client.on('error', (err) => {
-			aux.log(null, 'client [rpc] error:', err);
-		});
-
-		client.on('data', (data) => {
+	const ws = new WebSocket.Server({ port: port });
+	ws.on('connection', function(client, req) {
+		//
+		client.on('message', function(msgStr) {
 			try {
-				let buf = BufferPool.decorateBuffer(data);
-				let len = buf.readInt16BE();
-				let pType = buf.readUInt8();
-				let cmd = buf.readInt16BE();
-				let fromSrvId = buf.readInt16BE();
-				let cbId = buf.readInt16BE();
-				aux.log(null, "rpc data >>>>>>>>>>>>>", 'type', pType, ', cmd', cmd);
-				if ( pType == protocolType.SERVER_REMOTE_CALL ) {
-					let procChain = buf.readProtoString();
-					let msgStr = buf.readProtoString();
-					let msg = JSON.parse(msgStr);
-					let arr = procChain.split('.');
-					let srvType = arr[0];
-					let remoteName = arr[1];
-					let funcName = arr[2];
-					let remote = App.rpc.remoteTypeDict[srvType][remoteName];
-					aux.log(null, '>>>', procChain);
-					remote[funcName]([msg, function(err, obj) { // 原remote已被替换
-						let retBuf = BufferPool.createProtoBuffer(cmd, protocolType.SERVER_REMOTE_BACK);
-						retBuf.writeInt16BE(App.srvId); // srvId修改为本服，cbId不需要修改
-						retBuf.writeInt16BE(cbId);
-						if ( err ) {
-							obj = err;
-						}
-						else if ( obj == null ) {
-							obj = {};
-						}
-						let jsonStr = JSON.stringify(obj);
-						retBuf.writeProtoString(jsonStr);
-						serverMgr.getById(fromSrvId).getSocket().write(retBuf.sliceRawBuffer());
-					}]);
-				}
-				else if ( pType == protocolType.SERVER_REMOTE_BACK ) {
-					let msgStr = buf.readProtoString();
-					let msg = JSON.parse(msgStr);
-					App.rpc.runCb(cbId, msg);
-				}
-				else {
-					let arr = protoTrans[cmd].split('.');
-					let srvType = arr[0];
-					let handleName = arr[1];
-					let funcName = arr[2];
-					// aux.error(null, 'rpc handle', srvType+'.'+handleName+'.'+funcName);
-					if ( pType == protocolType.SERVER_HANDLE_CALL ) { // 从rpc端过来的一定是目标服本身接收到，因此不用判断srvId
-						let roleId = buf.readUInt32BE(); // 读取玩家id
-						let handle = App.rpc.handleTypeDict[srvType][handleName];
-						handle[funcName].call(handle, roleId, JSON.parse(buf.readProtoString()), function(err, obj) { // null参数应为session
-							if ( err ) {
-								obj = err;
-							}
-							let retBuf = BufferPool.createProtoBuffer(cmd, protocolType.SERVER_HANDLE_BACK);
-							retBuf.writeInt16BE(App.srvId); // srvId修改为本服，cbId不需要修改
-							retBuf.writeInt16BE(cbId);
-							let jsonStr = JSON.stringify(obj);
-							retBuf.writeProtoString(jsonStr);
-							serverMgr.getById(fromSrvId).getSocket().write(retBuf.sliceRawBuffer());
-						});
-					}
-					else if ( pType == protocolType.SERVER_HANDLE_BACK ) {
-						let retBuf = BufferPool.createBuffer();
-						retBuf.writeBuffer(buf, 0, 5); // 剔除srvId和cbId，但还未修改整理protocolType
-						retBuf.writeBuffer(buf, 9);
-						retBuf.setProtocolType(protocolType.CLIENT_REQUEST);
-						App.rpc.runCb(cbId, retBuf); // buf永远在write时才会slice
-					}
-					else {
-						aux.error(null, "rpc protocol type error >>>>>>>>>>>>>>>>", pType);
-					}
+				let msg = JSON.parse(msgStr);
+				switch (msg._sr.type) {
+					case protocolType.SERVER_REMOTE_CALL: // rpc call receive
+						procRemoteWithSR(msg, client);
+						break;
+					case protocolType.SERVER_HANDLE_CALL:
+						procHandleWithSR(msg, client);
+						break;
 				}
 			} catch (e) {
-				aux.error(null, 'rpc server error:', e);
+				aux.log(null, 'rpc server ('+ port +') error:', e);
 			}
 		});
-
-		//client.setNoDelay(true);
 	});
-
-	server.on('error', (err) => {
-		aux.log(null, 'application server error:', err);
-	});
-
-	server.listen(port, () => {
-		aux.log(null, 'rpc start listen', port);
-		cb();
-	});
+	process.nextTick(cb);
 }
 
-function createGameServer(port, cb) {
-	// ======== 与客户端进行socket通讯，以及和其他进程进行rpc通讯 ========
-	const server = net.createServer((client) => {
-		aux.log(null, 'client connected');
 
-		client.on('end', () => {
-			SessionMgr.remove(client);
-			aux.log(null, 'client disconnected');
-		});
+function procRemoteWithSR(msg, client) {
+	let sysRpc = msg._sr;
+	delete(msg._sr);
+	//
+	let arr = sysRpc.pc.split('.');
+	let srvType = arr[0];
+	let remoteName = arr[1];
+	let funcName = arr[2];
+	let remote = App.rpc.remoteTypeDict[srvType][remoteName];
+	remote[funcName]([msg, function(err, ret) { // 原remote已被包装
+		if ( err ) {
+			ret = err;
+		}
+		ret._sr = sysRpc;
+		client.send(JSON.stringify(ret));
+	}]);
+}
 
-		client.on('error', (err) => {
-			SessionMgr.remove(client);
-			aux.log(null, 'client [game] error:', err);
-		});
+function procHandleWithSR(msg, client) {
+	let sysRpc = msg._sr;
+	delete(msg._sr);
+	//
+	let arr = protoTrans[msg.cmd].split('.');
+	let srvType = arr[0];
+	let handleName = arr[1];
+	let funcName = arr[2];
+	let handle = App.rpc.handleTypeDict[srvType][handleName];
+	handle[funcName].call(handle, sysRpc.pid, msg, function(err, ret, close) {
+		if ( err ) {
+			ret = err;
+		}
+		ret.cmd = msg.cmd;
+		ret._sr = sysRpc;
+		client.send(JSON.stringify(ret));
+	}, client);
+}
+
+function procHandle(msg, client) {
+	let arr = protoTrans[msg.cmd].split('.');
+	let srvType = arr[0];
+	let handleName = arr[1];
+	let funcName = arr[2];
+	let handle = App.rpc.handleTypeDict[srvType][handleName];
+	handle[funcName].call(handle, client.pid, msg, function(err, ret, close) {
+		if ( err ) {
+			ret = err;
+		}
+		ret.cmd = msg.cmd;
+		client.send(JSON.stringify(ret));
+	}, client);
+}
 
 
-		let tcpPackage = new TcpPackage(function(data) {
-			let cmd;
+function createClientServer(port, cb) {
+	const ws = new WebSocket.Server({ port: port });
+	ws.on('connection', function(client, req) {
+		//
+		client.on('message', function(msgStr) {
 			try {
-				// if ( client.remoteAddress == "::ffff:127.0.0.1" )
-				let buf = BufferPool.decorateBuffer(data);
-				let len = buf.readInt16BE();
-				let pType = buf.readUInt8();
-				cmd = buf.readInt16BE();
-				let cbId = 0;
-				let fromSrvId = 0;
-				if ( pType == protocolType.SERVER_HANDLE_BACK ) {
-					fromSrvId = buf.readInt16BE();
-					cbId = buf.readInt16BE();
-				}
-				let session = SessionMgr.get(client);
-				let server = ServerMgr.getCurrentServer();
-				aux.error(null, "socket data >>>>>>>>>>>>>", 'len', len, ', cmd', cmd, ', real size:', data.length, server.type, server.port);
+				let msg = JSON.parse(msgStr);
+				aux.log(null, msg, protoTrans[msg.cmd]);
 				//
-				let arr = protoTrans[cmd].split('.');
-				let srvType = arr[0];
-				let handleName = arr[1];
-				let funcName = arr[2];
-				if (session == null) { // session不存在的阶段一定都是直连，主要是web和connector
-					let handle = App.rpc.handleTypeDict[srvType][handleName];
-					handle[funcName].call(handle, null, JSON.parse(buf.readProtoString()), function(err, obj, close) {
-						let retBuf = BufferPool.createProtoBuffer(cmd, protocolType.CLIENT_REQUEST);
-						let jsonStr = null;
-						if ( err ) {
-							jsonStr = JSON.stringify(err);
+				if (global.SessionMgr != null) { // [connector]
+					if ( client.pid == null ) { // [connector] 直连，如：login
+						procHandle(msg, client);
+					}
+					else { // other
+						let arr = protoTrans[msg.cmd].split('.');
+						let srvType = arr[0];
+						let server = ServerMgr.getByDispatch(srvType, client.pid);
+						if (server.id == App.srvId) { // 直接处理
+							procHandle(msg, client);
 						}
-						else {
-							jsonStr = JSON.stringify(obj);
+						else { // [connector] rpc转发到其他 [server]
+							packReply(msg, protocolType.SERVER_HANDLE_CALL, function(err, ret) {
+								if ( err ) {
+									ret = err;
+								}
+								ret.cmd = msg.cmd;
+								delete ret._sr;
+								client.send(JSON.stringify(ret));
+							});
+							msg._sr.pid = client.pid;
+							server.sendString(JSON.stringify(msg));
 						}
-						retBuf.writeProtoString(jsonStr);
-						let retRawBuf = retBuf.sliceRawBuffer();
-						let flushResult = client.write(retRawBuf);
-						if (close) {
-							//client.end();
-						}
-					}, client);
+					}
 				}
-				else { // 由于客户端从connector或web进，因此进入此分支必为转发
-					let server = ServerMgr.getByDispatch(srvType, session.roleId);
-					if ( server.id == App.srvId ) { // 直连端口，无需分服
-						let handle = App.rpc.handleTypeDict[srvType][handleName];
-						handle[funcName].call(handle, session.roleId, JSON.parse(buf.readProtoString()), function(err, obj) {
-							let retBuf = BufferPool.createProtoBuffer(cmd, protocolType.SERVER_HANDLE_BACK);
-							let jsonStr = null;
-							if ( err ) {
-								jsonStr = JSON.stringify(err);
-							}
-							else {
-								jsonStr = JSON.stringify(obj);
-							}
-							retBuf.writeProtoString(jsonStr);
-							client.write(retBuf.sliceRawBuffer());
-						});
-					}
-					else if ( pType == protocolType.CLIENT_REQUEST ) { // 从客户端过来的请求，需要分服转发（实际上如果在connector本线程，可以直接转发）
-						let fitBuf = fitToServerHandle(client, session, buf, cmd);
-						server.getSocket().write(fitBuf.sliceRawBuffer());
-					}
-					else {
-						aux.error(null, "client protocol type error >>>>>>>>>>>>>>>>", pType);
-					}
+				else { // [web] 直连，如：ticket
+					procHandle(msg, client);
 				}
 			} catch (e) {
-				let server = ServerMgr.getCurrentServer();
-				aux.log(null, "game server error", cmd, server, e);
+				aux.log(null, 'client [game] error:', e);
 			}
 		});
-
-		client.on('data', (data) => {
-			tcpPackage.addBuffer(data);
-		});
-
-		//client.setNoDelay(true);
 	});
-
-	server.on('error', (err) => {
-		aux.log(null, 'server has error', err);
-	});
-
-	server.listen(port, () => {
-		aux.log(null, 'server start listen', port);
-		cb();
-	});
+	process.nextTick(cb);
 }
 
 process.on('exit', (code) => {
@@ -467,8 +379,10 @@ global.App = new Application();
 // =================== 以下部分内容需要通过注册的形式给Application执行，因为GameServer只是在Master线程执行 ===================
 
 // 游戏逻辑部分
-global.Auxiliary   = require(ROOT_DIR +'lib/Auxiliary')
+global.Auxiliary   = require(ROOT_DIR +'lib/Auxiliary');
 global.ErrorCode   = require(ROOT_DIR +'model/system/ErrorCode').getDict();
 global.MysqlExtend = require(ROOT_DIR +'lib/MysqlExtend').getInst();
 
 global.aux         = global.Auxiliary;
+
+// ============================================================================================================================

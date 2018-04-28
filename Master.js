@@ -3,8 +3,12 @@
 const net = require('net');
 const fs = require('fs');
 const childProcess = require('child_process');
+const WebSocket = require('ws');
 
 global.ROOT_DIR = __dirname +"/";
+
+global.Auxiliary   = require(ROOT_DIR +'lib/Auxiliary');
+global.aux         = global.Auxiliary;
 
 const serverMgr = require(ROOT_DIR +'lib/ServerMgr.js').getInst();
 const instruct = require(ROOT_DIR +'lib/ServerInstruct.js').getDict();
@@ -26,15 +30,6 @@ pro.init = function() {
 		let servers = srvCfg[srvType];
 		for ( let i in servers ) {
 			let cfg = servers[i];
-			// let logFile = 'log/'+ cfg.port +'.log';
-			// if (fs.existsSync(logFile)) {
-			// 	fs.unlinkSync(logFile);
-			// }
-			// let out = fs.openSync(logFile, 'a');
-			// let err = fs.openSync(logFile, 'a');
-			// this.srvDict[cfg.port] = childProcess.fork(ROOT_DIR +"Application.js", [srvId, srvType, cfg.port, cfg.clientPort]);
-			// this.srvDict[cfg.port] = childProcess.spawn("nohup", ['node', ROOT_DIR +"Application.js", srvId, srvType, cfg.port, cfg.clientPort], {stdio:[process.stdin, process.stdout, process.stderr, 'ipc']});
-			// this.srvDict[cfg.port] = childProcess.spawn("node", [ROOT_DIR +"Application.js", srvId, srvType, cfg.port, cfg.clientPort], {detached: true, stdio:['ignore', out, err, 'ipc']});
 			this.srvDict[cfg.port] = childProcess.spawn("node", [ROOT_DIR +"Application.js", srvId, srvType, cfg.port, cfg.clientPort], {stdio:[process.stdin, process.stdout, process.stderr, 'ipc']});
 			serverMgr.add(srvId, srvType, cfg);
 			++srvId;
@@ -61,7 +56,7 @@ pro.regMessage = function(child, port) {
 			case instruct.STOP:
 				++this.msgCount;
 				if (this.msgCount == serverMgr.getSize()) {
-					console.log('close all server', this.msgCount);
+					aux.log('close all server', this.msgCount);
 					process.exit(1)
 				}
 				break;
@@ -69,48 +64,71 @@ pro.regMessage = function(child, port) {
 	});
 }
 
-// 与控制台通讯接口
-const server = net.createServer((client) => {
-	console.log('client connected');
+// // 与控制台通讯接口
+// const server = net.createServer((client) => {
+// 	aux.log('client connected');
 
-	client.on('end', () => {
-		console.log('client disconnected');
-	});
+// 	client.on('end', () => {
+// 		aux.log('client disconnected');
+// 	});
 
-	client.on('error', (err) => {
-		console.log('client error:', err);
-	});
+// 	client.on('error', (err) => {
+// 		aux.log('client error:', err);
+// 	});
 
-	client.on('data', (data) => {
+// 	client.on('data', (data) => {
+// 		try {
+// 			switch (data.toString()) {
+// 				case 'stop':
+// 					for (let i in master.srvDict) {
+// 						let srv = master.srvDict[i];
+// 						aux.log('stop port:', i);
+// 						srv.send({ins: instruct.STOP});
+// 						// srv.kill('SIGHUP');
+// 					}
+// 					break;
+// 			}
+// 		} catch (e) {
+// 			aux.log(e);
+// 		}
+// 	});
+
+// 	//client.setNoDelay(true);
+// });
+
+// server.on('error', (err) => {
+// 	aux.log('master server error:', err);
+// });
+
+// server.listen(masterCfg.port, () => {
+// 	aux.log('master start listen', masterCfg.port);
+// });
+
+const ws = new WebSocket.Server({ port: masterCfg.port });
+ws.on('connection', function(client, req) {
+	aux.log(null, 'console admin connected');
+	//
+	client.on('message', function(msgStr) {
 		try {
-			switch (data.toString()) {
+			switch (msgStr) {
 				case 'stop':
 					for (let i in master.srvDict) {
+						aux.log(null, 'stop port:', i);
 						let srv = master.srvDict[i];
-						console.log('stop port:', i);
 						srv.send({ins: instruct.STOP});
-						// srv.kill('SIGHUP');
 					}
 					break;
 			}
 		} catch (e) {
-			console.error(e);
+			aux.log(null, 'master server error:', e);
 		}
 	});
-
-	//client.setNoDelay(true);
 });
+aux.log(null, 'master start listen', masterCfg.port);
 
-server.on('error', (err) => {
-	console.log('master server error:', err);
-});
-
-server.listen(masterCfg.port, () => {
-	console.log('server start listen', masterCfg.port);
-});
 
 process.on('close', (code, signal) => {
-	console.log(`master process terminated due to receipt of signal ${signal}`);
+	aux.log(`master process terminated due to receipt of signal ${signal}`);
 });
 
 

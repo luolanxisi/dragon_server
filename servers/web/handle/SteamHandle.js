@@ -11,83 +11,52 @@ function Handle() {
 const pro = Handle.prototype;
 
 
-pro.WEB_STEAM_TICKET = function(role, msg, cb) {
-	let ticket = msg.ticket; // ticket.toString('hex')
-	// let time   = msg.time; // 临时测试代码
-
-	const options = {
-		hostname: 'api.steampowered.com',
-		port: 443,
-		path: '/ISteamUserAuth/AuthenticateUserTicket/v0001/?key=1FC2213F37BF615B29EFC2F08264F545&appid=480&ticket='+ ticket,
-		method: 'GET'
-	};
-
-	// ticket += time; // 临时测试代码
-
-	const req = https.request(options, (res) => {
-		//console.log('statusCode:', res.statusCode);
-		//console.log('headers:', res.headers);
-
-		res.on('data', (data) => {
-			const obj = JSON.parse(data);
-			if ( obj.response.error ) {
-				return cb(Auxiliary.createError(ErrorCode.REQUEST_STEAM_ID, obj.response.error.errordesc), null, true);
-			}
-			const steamId = obj.response.params.steamid;
-			const platformId = steamId;
-			// const platformId = steamId.slice(0, 9) - parseInt(time); // 临时测试代码
-			// 该处还未保证sql执行原子性
-			MysqlExtend.query('SELECT roleId FROM tbl_platform WHERE id=? LIMIT 1', [platformId], function (err, res) {
+pro.WEB_TICKET = function(_null, msg, cb) {
+	let ticket = msg.ticket; // 电话号码
+	let platformId = ticket;
+	//
+	MysqlExtend.query('SELECT pid FROM tbl_platform WHERE id=? LIMIT 1', [platformId], function (err, res) {
+		if (err) {
+			aux.log(null, err);
+			return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
+		}
+		if ( res.length == 0 ) { // 新建账号
+			let regTime = aux.now();
+			let name = 'Guest#'+aux.randomRange(1000, 9999);
+			MysqlExtend.query("INSERT INTO tbl_player(name, regTime, lastLogin) VALUES(?, ?, ?)", [name, regTime, regTime], function (err, res) {
 				if (err) {
-					console.log(err);
+					aux.log(null, err);
 					return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
 				}
-				if ( res.length == 0 ) { // 新建账号
-					let regTime = Math.floor((new Date()).getTime() / 1000);
-					MysqlExtend.query("INSERT INTO tbl_role(name, regTime, lastLogin, missionData, robotData, itemData) VALUES(?, ?, ?, '{}', '{}', '{}')", ['Guest', regTime, regTime], function (err, res) {
-						if (err) {
-							console.log(err);
-							return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
-						}
-						let roleId = res.insertId;
-						// console.error(roleId);
-						MysqlExtend.query('INSERT INTO tbl_platform(id, roleId) VALUES(?, ?)', [platformId, roleId], function (err, res) {
-							if (err) {
-								console.log(err);
-								return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
-							}
-							loginSucc(roleId, ticket, steamId, cb);
-						});
-					});
-				}
-				else {
-					let roleId = res[0].roleId;
-					loginSucc(roleId, ticket, steamId, cb);
-				}
+				let pid = res.insertId;
+				MysqlExtend.query('INSERT INTO tbl_platform(id, pid) VALUES(?, ?)', [platformId, pid], function (err, res) {
+					if (err) {
+						aux.log(null, err);
+						return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
+					}
+					loginSucc(pid, ticket, cb);
+				});
 			});
-		});
+		}
+		else {
+			let pid = res[0].pid;
+			loginSucc(pid, ticket, cb);
+		}
 	});
-
-	req.on('error', (e) => {
-		cb(Auxiliary.createError(ErrorCode.REQUEST_STEAM_ID, e), null, true);
-	});
-
-	req.end();
 }
 
-function loginSucc(roleId, ticket, steamId, cb) {
+function loginSucc(pid, ticket, cb) {
 	// 分服
-	let server = ServerMgr.getByDispatch('connector', roleId);
+	let server = ServerMgr.getByDispatch('connector', pid);
 	let args = {
-		roleId  : roleId,
-		ticket  : ticket,
-		steamId : steamId,
-		expire  : Auxiliary.now() + 300
+		ticket : ticket,
+		pid : pid
 	};
-	App.callRemote("connector.RoleRemote.webLogin", roleId, args, function(err, res) {
+	App.callRemote("connector.PlayerRemote.webLogin", pid, args, function(err, res) {
 		if ( err ) {
 			return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
 		}
 		cb(null, {host:server.getHost(), port:server.getClientPort()}, true);
 	});
 }
+

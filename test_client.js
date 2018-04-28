@@ -67,7 +67,7 @@ var client = null;
 var natClient = null; // NAT穿透辅助接口
 var roleId = null;
 
-const webClient = net.createConnection({host:"47.88.49.165", port:8000}, () => { // 用steam平台ticket进行登录 47.88.49.165, 106.14.156.178
+const webClient = net.createConnection({host:"127.0.0.1", port:8001}, () => { // 用steam平台ticket进行登录 47.88.49.165, 106.14.156.178
 	console.log('connected to web server!');
 	let buf = BufferPool.createBuffer();
 	buf.writeInt16BE(0);
