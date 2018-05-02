@@ -28,6 +28,10 @@ pro.get = function(id) {
 	return this.pool.get(id);
 }
 
+pro.getCapital = function() {
+	return this.pool.get(1);
+}
+
 pro.remove = function(id) {
 	return this.pool.remove(id);
 }

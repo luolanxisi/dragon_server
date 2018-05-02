@@ -12,8 +12,9 @@ const dict = {
 	MAP_DEFEND      : 102,
 	MAP_FARM        : 103,
 	MAP_TRAIN       : 104,
-	// 招募协议
-	HERO_HIRE : 200
+	// 英雄协议
+	HERO_HIRE : 200,
+	HERO_MAKE_TEAM : 201
 };
 
 exports.getDict = function() {
@@ -33,7 +34,8 @@ transDict[dict.MAP_DEFEND]      = "player.MapHandle.MAP_DEFEND";
 transDict[dict.MAP_FARM]        = "player.MapHandle.MAP_FARM";
 transDict[dict.MAP_TRAIN]       = "player.MapHandle.MAP_TRAIN";
 //
-transDict[dict.HERO_HIRE] = "player.HeroHandle.HERO_HIRE";
+transDict[dict.HERO_HIRE]      = "player.HeroHandle.HERO_HIRE";
+transDict[dict.HERO_MAKE_TEAM] = "player.HeroHandle.HERO_MAKE_TEAM";
 
 
 exports.getTransDict = function() {

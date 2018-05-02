@@ -35,5 +35,21 @@ pro.HERO_HIRE = function(pid, msg, cb) {
 	});
 }
 
-
+pro.HERO_MAKE_TEAM = function(pid, msg, cb) {
+	let teamId = msg.teamId;
+	let heroIds = msg.heroIds;
+	PlayerMgr.get(pid, function(err, player) {
+		if (err) {
+			return cb(err);
+		}
+		player.getCastleMgr(function(err, castleMgr) {
+			if (err) {
+				return cb(err);
+			}
+			let castle = castleMgr.getCapital();
+			castle.setTeam(teamId, heroIds);
+			cb(null, {});
+		});
+	});
+}
 
