@@ -14,7 +14,9 @@ const dict = {
 	MAP_TRAIN       : 104,
 	// 英雄协议
 	HERO_HIRE : 200,
-	HERO_MAKE_TEAM : 201
+	HERO_MAKE_TEAM : 201,
+	// 战斗协议
+	BATTLE_RESULT : 300 // 派发战斗结果
 };
 
 exports.getDict = function() {

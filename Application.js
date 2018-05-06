@@ -15,7 +15,6 @@ const protoTrans = require(ROOT_DIR +'model/network/Proto').getTransDict();
 const protocolType = require(ROOT_DIR +'model/network/Proto').getTypeDict();
 
 global.ServerMgr = require(ROOT_DIR +'lib/ServerMgr.js').getInst();
-global.proto = require(ROOT_DIR +'model/network/Proto').getDict();
 
 
 // const port = process.argv[2];
@@ -236,7 +235,7 @@ process.on('message', (msg) => {
 			});
 			//
 			if (ServerMgr.getCurrentServer().type == "connector") {
-				global.SessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
+				App.SessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
 			}
 			break;
 	}
@@ -329,7 +328,7 @@ function createClientServer(port, cb) {
 				let msg = JSON.parse(msgStr);
 				aux.log(null, msg, protoTrans[msg.cmd]);
 				//
-				if (global.SessionMgr != null) { // [connector]
+				if (App.SessionMgr != null) { // [connector]
 					if ( client.pid == null ) { // [connector] 直连，如：login
 						procHandle(msg, client);
 					}
@@ -384,5 +383,7 @@ global.ErrorCode   = require(ROOT_DIR +'model/system/ErrorCode').getDict();
 global.MysqlExtend = require(ROOT_DIR +'lib/MysqlExtend').getInst();
 
 global.aux         = global.Auxiliary;
+
+App.Proto = require(ROOT_DIR +'model/network/Proto').getDict();
 
 // ============================================================================================================================

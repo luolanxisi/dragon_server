@@ -36,6 +36,14 @@ pro.remove = function(id) {
 	return this.pool.remove(id);
 }
 
+pro.findTeam = function(teamId) {
+	let team = this.pool.eachBreak(function(castle) {
+		if (castle.getTeam(teamId) != null) {
+			return castle.getTeam(teamId);
+		}
+	});
+	return team;
+}
 
 // ===== 每个mgr类必须实现方法 =====
 

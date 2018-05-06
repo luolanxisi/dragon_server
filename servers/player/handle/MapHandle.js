@@ -1,6 +1,6 @@
 "use strict";
 
-// const RoleMgr = require(ROOT_DIR +'model/role/RoleMgr').getInst();
+const PlayerMgr = require(ROOT_DIR +'model/player/PlayerMgr').getInst();
 
 
 module.exports = Handle;
@@ -11,143 +11,72 @@ function Handle() {
 const pro = Handle.prototype;
 
 
-pro.MAP_ATTACK = function(roleId, msg, cb) {
+pro.MAP_ATTACK = function(pid, msg, cb) {
+	let teamId = msg.teamId
+	let x = msg.x;
+	let y = msg.y;
+	let campType = msg.campType;
+	let campId = msg.campId;
+	PlayerMgr.get(pid, function(err, player) {
+		if (err) {
+			return cb(err);
+		}
+		player.getCastleMgr(function(err, castleMgr) {
+			if (err) {
+				return cb(err);
+			}
+			// 实际出兵点有可能是要塞，还需要验证当前出兵点是否有该部队驻扎
+			let castle = castleMgr.get(campId);
+			let team = castle.getTeam(teamId);
+			if ( ! team.tryLock() ) {
+				return cb(aux.createError(ErrorCode.SERVER_ERROR, "Team has already locked!"));
+			}
+			// 
+			player.getHeroMgr(function(err, heroMgr) {
+				if (err) {
+					return cb(err);
+				}
+				let minSpeed = 1000000;
+				let size = team.getSize();
+				for (let i=0; i<size; ++i) {
+					let pos = i + 1;
+					let heroId = team.get(pos);
+					if (heroId != 0) {
+						let hero = heroMgr.get(heroId);
+						let speed = hero.getSpeed();
+						if ( speed < minSpeed ) {
+							minSpeed = speed;
+						}
+					}
+				}
+				//
+				let para = {
+					pid    : pid,
+					teamId : teamId,
+					speed  : minSpeed,
+					startX : castle.getX(),
+					startY : castle.getY(),
+					endX   : x,
+					endY   : y
+				};
+				App.callRemote("map.MapRemote.attackTile", null, para, function(err, res) {
+					if (err) {
+						return cb(err);
+					}
+					cb(null, res);
+				});
+			});
+		});
+	});
 }
 
-pro.MAP_DEFEND = function(roleId, msg, cb) {
+pro.MAP_DEFEND = function(pid, msg, cb) {
 }
 
-pro.MAP_FARM = function(roleId, msg, cb) {
+pro.MAP_FARM = function(pid, msg, cb) {
 }
 
-pro.MAP_TRAIN = function(roleId, msg, cb) {
+pro.MAP_TRAIN = function(pid, msg, cb) {
 }
-
-// pro.ROLE_SELECT_ROBOT = function(roleId, msg, cb) {
-// 	let robotCfgId = msg.robotCfgId;
-// 	RoleMgr.get(roleId, function(err, role) {
-// 		if (err) {
-// 			return cb(err);
-// 		}
-// 		role.getRobotMgr(function(err, robotMgr) {
-// 			if (err) {
-// 				return cb(err);
-// 			}
-// 			let retErr = robotMgr.setCurRobot(robotCfgId);
-// 			if (retErr) {
-// 				return cb(retErr);
-// 			}
-// 			cb(null, {});
-// 		});
-// 	});
-// }
-
-// pro.ROLE_UPDATE_INFO = function(roleId, msg, cb) {
-// 	let rank       = msg.rank;
-// 	let money      = msg.money;
-// 	let gem        = msg.gem;
-// 	let curMission = msg.curMission;
-// 	let items      = msg.items;
-// 	let curRobotId = msg.curRobotId;
-// 	let robotList  = msg.robotList;
-// 	let robotWarList = msg.robotWarList;
-// 	RoleMgr.get(roleId, function(err, role) {
-// 		if (err) {
-// 			return cb(err);
-// 		}
-// 		role.setFirst();
-// 		if (rank != null) {
-// 			role.setRank(rank);
-// 		}
-// 		if (money != null) {
-// 			role.setMoney(money);
-// 		}
-// 		if (gem != null) {
-// 			role.setGem(gem);
-// 		}
-// 		procMission(role, curMission, function(err) {
-// 			if (err) {
-// 				return cb(err);
-// 			}
-// 			procItem(role, items, function(err) {
-// 				if (err) {
-// 					return cb(err);
-// 				}
-// 				procRobot(role, curRobotId, robotList, robotWarList, function(err) {
-// 					if (err) {
-// 						return cb(err);
-// 					}
-// 					cb(null, {});
-// 				});
-// 			});
-// 		});
-// 	});
-// }
-
-// function procMission(role, curMission, cb) {
-// 	if (curMission == null) {
-// 		cb();
-// 	}
-// 	else {
-// 		role.getMissionMgr(function(err, missionMgr) {
-// 			if (err) {
-// 				return cb(err);
-// 			}
-// 			missionMgr.setCurMission(curMission);
-// 			cb();
-// 		});
-// 	}
-// }
-
-// function procItem(role, items, cb) {
-// 	if (items == null) {
-// 		cb();
-// 	}
-// 	else {
-// 		role.getItemMgr(function(err, itemMgr) {
-// 			if (err) {
-// 				return cb(err);
-// 			}
-// 			itemMgr.setItems(items);
-// 			cb();
-// 		});
-// 	}
-// }
-
-// function procRobot(role, curRobotId, robotList, robotWarList, cb) {
-// 	if (curRobotId == null && robotList == null && robotWarList == null) {
-// 		cb();
-// 	}
-// 	else {
-// 		role.getRobotMgr(function(err, robotMgr) {
-// 			if (err) {
-// 				return cb(err);
-// 			}
-// 			//
-// 			if (curRobotId != null) {
-// 				robotMgr.setCurRobot(curRobotId);
-// 			}
-// 			if (robotList != null) {
-// 				for (let i in robotList) {
-// 					let robotData = robotList[i];
-// 					let robot = robotMgr.get(robotData.id);
-// 					if (robot) {
-// 						robot.load(robotData);
-// 					}
-// 					else {
-// 						robot = robotMgr.add(robotData.id);
-// 						if (robot) {
-// 							robot.load(robotData);
-// 						}
-// 					}
-// 				}
-// 			}
-// 			if (robotWarList != null) {
-// 				robotMgr.setWarList(robotWarList);
-// 			}
-// 			cb();
-// 		});
-// 	}
-// }
 
 

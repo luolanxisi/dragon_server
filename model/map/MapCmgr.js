@@ -1,5 +1,7 @@
 "use strict";
 
+const Tile = require(ROOT_DIR +'model/map/Tile.js');
+
 
 const instance = new MapCmgr();
 
@@ -25,13 +27,17 @@ function MapCmgr() {
 	for (let y=0; y<this.MAP_TILE_LINE; ++y) {
 		this.mapDatas[y] = [];
 		for (let x=0; x<this.MAP_TILE_COLUMN; ++x) {
-			this.mapDatas[y][x] = {x:x, y:y, cfgId:aux.randomRange(1, 13), pid:0}; // build
+			this.mapDatas[y][x] = new Tile(x, y, aux.randomRange(1, 13));
 		}
 	}
 }
 
 const pro = MapCmgr.prototype;
 
+
+pro.getTile = function(x, y) {
+	return this.mapDatas[y][x];
+}
 
 pro.addCastle = function(pid, x, y) {
 	this.fillCastle(pid, x, y, this.mapDatas[y+1][x+1]);

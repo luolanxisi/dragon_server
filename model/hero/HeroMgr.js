@@ -26,7 +26,9 @@ pro.add = function(hero) {
 }
 
 pro.addByCfgId = function(cfgId, level) {
-	this.add(Hero.createInit(cfgId, level));
+	let hero = Hero.createInit(cfgId, level);
+	this.add(hero);
+	return hero;
 }
 
 pro.get = function(id) {

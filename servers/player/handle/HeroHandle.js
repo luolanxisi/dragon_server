@@ -25,12 +25,14 @@ pro.HERO_HIRE = function(pid, msg, cb) {
 			if (err) {
 				return cb(err);
 			}
+			let heroes = [];
 			let level = cardPool.getLevel();
 			for (let i in heroCfgIds) {
 				let heroCfgId = heroCfgIds[i];
-				heroMgr.addByCfgId(heroCfgId, level);
+				let hero = heroMgr.addByCfgId(heroCfgId, level);
+				heroes.push({ id:hero.getId(), cfgId:heroCfgId });
 			}
-			cb(null, { heroCfgIds : heroCfgIds });
+			cb(null, { heroes:heroes, level:level });
 		});
 	});
 }
@@ -47,7 +49,11 @@ pro.HERO_MAKE_TEAM = function(pid, msg, cb) {
 				return cb(err);
 			}
 			let castle = castleMgr.getCapital();
-			castle.setTeam(teamId, heroIds);
+			let team = castle.getTeam(teamId);
+			if ( team.isLock() ) {
+				return cb(aux.createError(ErrorCode.SERVER_ERROR, "Team has already locked!"));
+			}
+			team.fill(heroIds);
 			cb(null, {});
 		});
 	});

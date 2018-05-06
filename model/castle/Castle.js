@@ -1,6 +1,7 @@
 "use strict";
 
 const Dict  = require(ROOT_DIR +'lib/collection/Dict');
+const Team = require(ROOT_DIR +'model/team/Team');
 
 
 module.exports.createInit = function(x, y) {
@@ -17,16 +18,13 @@ module.exports.createLoad = function(data) {
 
 
 function Castle() {
+	this.id = 0;
 	this.x = 0;
 	this.y = 0;
 	this.builds = new Dict();
 	this.teams = new Array(5);
 	for (let i=0; i<5; ++i) {
-		let team = new Array(3);
-		for (let j=0; j<3; ++j) {
-			team[j] = 0;
-		}
-		this.teams[i] = team;
+		this.teams[i] = new Team();
 	}
 }
 
@@ -41,11 +39,17 @@ pro.getY = function() {
 	return this.y;
 }
 
-pro.setTeam = function(teamId, heroIds) {
-	let team = this.teams[teamId-1];
-	team[0] = heroIds[0];
-	team[1] = heroIds[1];
-	team[2] = heroIds[2];
+pro.getTeam = function(teamId) {
+	return this.teams[teamId-1];
+}
+
+pro.packTeam = function() {
+	let arr = [];
+	for (let i in this.teams) {
+		let team = this.teams[i];
+		arr.push(team.pack());
+	}
+	return arr;
 }
 
 pro.init = function(x, y) {
@@ -55,18 +59,20 @@ pro.init = function(x, y) {
 
 pro.pack = function() {
 	let ret = {
+		id : this.id,
 		x : this.x,
 		y : this.y,
-		teams : this.teams
+		teams : this.packTeam()
 	};
 	return ret;
 }
 
 pro.toData = function() {
 	let ret = {
+		id : this.id,
 		x : this.x,
 		y : this.y,
-		teams : this.teams
+		teams : this.packTeam()
 	};
 	return ret;
 }
