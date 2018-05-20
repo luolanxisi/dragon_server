@@ -1,65 +1,91 @@
 "use strict";
 
 const util         = require('util');
-const DbPackEntity = require(ROOT_DIR +'lib/DbPackEntity');
+// const DbPackEntity = require(ROOT_DIR +'lib/DbPackEntity');
 const Dict         = require(ROOT_DIR +'lib/collection/Dict');
 const Land         = require(ROOT_DIR +'model/land/Land');
+const MapConst     = require(ROOT_DIR +'model/map/MapConst');
+const MapData      = require(ROOT_DIR +'model/map/MapData').getInst();
 
 
 module.exports = LandMgr;
 
 function LandMgr(pid) {
-	DbPackEntity.call(this, "tbl_player", {"id":pid}, "landData");
+	// DbPackEntity.call(this, "tbl_player", {"id":pid}, "landData");
 	this.pid = pid;
-	this.pool = new Dict();
+	this.pool = [];
 }
 
-util.inherits(LandMgr, DbPackEntity);
+// util.inherits(LandMgr, DbPackEntity);
 
 const pro = LandMgr.prototype;
 
 
-pro.add = function(cfgId) {
-	// if (this.pool.has(cfgId)) {
-	// 	return;
-	// }
-	// let robot = Robot.createInit(cfgId);
-	// this.pool.add(robot.getId(), robot);
-	// return robot;
+pro.add = function(land) {
+	this.pool.push(land);
 }
 
-pro.get = function(id) {
-	// return this.pool.get(cfgId);
+pro.countWoodProduce = function() {
+	let count = 0;
+	for (let i in this.pool) {
+		let land = this.pool[i];
+		count += land.getWoodProduce();
+	}
+	return count;
 }
 
-pro.remove = function(id) {
+pro.countStoneProduce = function() {
+	let count = 0;
+	for (let i in this.pool) {
+		let land = this.pool[i];
+		count += land.getStoneProduce();
+	}
+	return count;
 }
 
+pro.countIronProduce = function() {
+	let count = 0;
+	for (let i in this.pool) {
+		let land = this.pool[i];
+		count += land.getIronProduce();
+	}
+	return count;
+}
+
+pro.countFoodProduce = function() {
+	let count = 0;
+	for (let i in this.pool) {
+		let land = this.pool[i];
+		count += land.getFoodProduce();
+	}
+	return count;
+}
 
 // ===== 每个mgr类必须实现方法 =====
 
 pro.register = function(cb) {
-	// 主城城区
 	cb();
 }
 
 // save在DbPackEntity中实现
-
 pro.load = function(cb) {
+	cb();
+}
+
+pro.afterAllLoad = function(cb) {
 	let self = this;
-	MysqlExtend.query('SELECT landData FROM tbl_player WHERE id=? LIMIT 1', [this.pid], function (err, res) {
-		if (err) {
+	App.callRemote("map.MapRemote.fetchPlayerTile", this.pid, { pid : this.pid }, function(err, res) {
+		if ( err ) {
 			return cb(err);
 		}
-		if (res.length <= 0) {
-			return cb();
+		let tileList = res.tileList;
+		for (let i in tileList) {
+			let data = tileList[i];
+			let land = Land.createLoad(data);
+			self.add(land);
 		}
 		cb();
 	});
-}
-
-pro.afterLoad = function(cb) {
-	cb();
 }
 
 pro.online = function(cb) {
@@ -74,35 +100,21 @@ pro.destory = function(cb) {
 	cb();
 }
 
-
 pro.pack = function() {
-	// let elements = this.pool.getRaw();
-	// let arr = [];
-	// for (let i in elements) {
-	// 	let element = elements[i];
-	// 	arr.push(element.pack());
-	// }
-	// let ret = {
-	// 	curRobotId : this.curRobot != null ? this.curRobot.getId() : 0,
-	// 	elements   : arr,
-	// 	warList    : this.warList
-	// };
-	// return ret;
+	let arr = [];
+	for (let i in this.pool) {
+		let land = this.pool[i];
+		arr.push(land.pack());
+	}
+	//
+	let ret = {
+		lands : arr
+	};
+	return ret;
 }
 
-pro.toData = function() {
-	// let elements = this.pool.getRaw();
-	// let arr = [];
-	// for (let i in elements) {
-	// 	let element = elements[i];
-	// 	arr.push(element.toData());
-	// }
-	// let ret = {
-	// 	curRobotId : this.curRobot != null ? this.curRobot.getId() : 0,
-	// 	elements   : arr,
-	// 	warList    : this.warList
-	// };
-	// return ret;
+pro.save = function(cb) {
+	cb();
 }
 
 

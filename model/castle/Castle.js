@@ -1,6 +1,6 @@
 "use strict";
 
-const Dict  = require(ROOT_DIR +'lib/collection/Dict');
+const Dict = require(ROOT_DIR +'lib/collection/Dict');
 const Team = require(ROOT_DIR +'model/team/Team');
 
 
@@ -57,6 +57,17 @@ pro.init = function(x, y) {
 	this.y = y;
 }
 
+pro.load = function(data) {
+	this.id = data.id;
+	this.x = data.x;
+	this.y = data.y;
+	let teams = data.teams;
+	for (let i=0; i<teams.length; ++i) {
+		let team = this.teams[i];
+		team.fill(teams[i]);
+	}
+}
+
 pro.pack = function() {
 	let ret = {
 		id : this.id,
@@ -68,12 +79,6 @@ pro.pack = function() {
 }
 
 pro.toData = function() {
-	let ret = {
-		id : this.id,
-		x : this.x,
-		y : this.y,
-		teams : this.packTeam()
-	};
-	return ret;
+	return this.pack();
 }
 

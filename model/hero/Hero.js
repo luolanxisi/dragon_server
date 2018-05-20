@@ -73,6 +73,10 @@ pro.setArmy = function(value) {
 	this.army = value || 0;
 }
 
+pro.getArmy = function() {
+	return this.army;
+}
+
 pro.setWoundArmy = function(value) {
 	this.woundArmy = value || 0;
 }

@@ -7,11 +7,11 @@ const SkillMgr  = require(ROOT_DIR +'model/skill/SkillMgr');
 const CastleMgr = require(ROOT_DIR +'model/castle/CastleMgr');
 const TaskMgr   = require(ROOT_DIR +'model/task/TaskMgr');
 
-const LAND_MGR = 1; // 领土
-const HERO_MGR = 2; // 英雄
-const SKILL_MGR = 3; // 技能
-const CASTLE_MGR = 4; // 城池
-const TASK_MGR = 5; // 任务
+const LAND_MGR = 0; // 领土
+const HERO_MGR = 1; // 英雄
+const SKILL_MGR = 2; // 技能
+const CASTLE_MGR = 3; // 城池
+const TASK_MGR = 4; // 任务
 
 module.exports = Player;
 
@@ -41,15 +41,22 @@ function Player(id) {
 	//
 	this.skillExp = 200;
 	//
-	this.mgrDict = new Dict();
-	this.mgrDict.add(LAND_MGR,   {class:LandMgr,   obj:null, waitQueue:[]});
-	this.mgrDict.add(HERO_MGR,   {class:HeroMgr,   obj:null, waitQueue:[]});
-	this.mgrDict.add(SKILL_MGR,  {class:SkillMgr,  obj:null, waitQueue:[]});
-	this.mgrDict.add(CASTLE_MGR, {class:CastleMgr, obj:null, waitQueue:[]});
-	this.mgrDict.add(TASK_MGR,   {class:TaskMgr,   obj:null, waitQueue:[]});
+	// this.mgrDict = new Dict();
+	// this.mgrDict.add(LAND_MGR,   {class:LandMgr,   obj:null, waitQueue:[]});
+	// this.mgrDict.add(HERO_MGR,   {class:HeroMgr,   obj:null, waitQueue:[]});
+	// this.mgrDict.add(SKILL_MGR,  {class:SkillMgr,  obj:null, waitQueue:[]});
+	// this.mgrDict.add(CASTLE_MGR, {class:CastleMgr, obj:null, waitQueue:[]});
+	// this.mgrDict.add(TASK_MGR,   {class:TaskMgr,   obj:null, waitQueue:[]});
+	//
+	this.mgrDict = [];
+	this.mgrDict.push({class:LandMgr,   obj:null, waitQueue:[]});
+	this.mgrDict.push({class:HeroMgr,   obj:null, waitQueue:[]});
+	this.mgrDict.push({class:SkillMgr,  obj:null, waitQueue:[]});
+	this.mgrDict.push({class:CastleMgr, obj:null, waitQueue:[]});
+	// this.mgrDict.push({class:TaskMgr,   obj:null, waitQueue:[]});
 	//
 	// this.online = false;
-	// this.lastUse = Auxiliary.now(); // for gc
+	this.stampLastUse();
 }
 
 const pro = Player.prototype;
@@ -133,7 +140,7 @@ pro.getTaskMgr = function(cb) {
 
 
 pro.getMgr = function(key, cb) {
-	let mgr = this.mgrDict.get(key);
+	let mgr = this.mgrDict[key];
 	if ( mgr.obj === null ) {
 		mgr.waitQueue.push(cb);
 		if ( mgr.waitQueue.length > 1 ) {
@@ -143,20 +150,13 @@ pro.getMgr = function(key, cb) {
 		let waitQueue = mgr.waitQueue;
 		obj.load(function(err, res) {
 			if (err) {
-				aux.log(null, err);
+				aux.log(err);
 				mgr.waitQueue = [];
 				return Auxiliary.cbAll(waitQueue, [err]);
 			}
-			obj.afterLoad(function(err, res) {
-				if (err) {
-					aux.log(null, err);
-					mgr.waitQueue = [];
-					return Auxiliary.cbAll(waitQueue, [err]);
-				}
-				mgr.waitQueue = [];
-				mgr.obj = obj;
-				Auxiliary.cbAll(waitQueue, [null, mgr.obj]);
-			});
+			mgr.waitQueue = [];
+			mgr.obj = obj;
+			Auxiliary.cbAll(waitQueue, [null, mgr.obj]);
 		});
 	}
 	else {
@@ -169,67 +169,55 @@ pro.getMgr = function(key, cb) {
 
 pro.register = function(cb) {
 	let self = this;
-	let total = this.mgrDict.getSize();
 	//
+	aux.parallelEach(this.mgrDict, function(item, nextCb, key) {
+		self.getMgr(key, function(err, mgr) {
+			nextCb(err);
+		});
+	}, function(err) {
+		if (err) {
+			aux.log("load mgr error", err);
+		}
+		cb();
+	});
+}
+
+pro.save = function(cb) {
+	let mgrSaveList = [];
+	for ( let key in this.mgrDict ) {
+		if (this.mgrDict[key].obj != null) {
+			mgrSaveList.push(this.mgrDict[key].obj);
+		}
+	}
+	//
+	let self = this;
+	let total = mgrSaveList.length + 1;
 	let count = 0;
-	let mgrDict = this.mgrDict.getRaw();
-	for ( let key in mgrDict ) {
-		this.getMgr(key, function(err, mgr) {
+	//
+	MysqlExtend.query('UPDATE tbl_player SET name=?, gold=?, gem=?, wood=?, stone=?, iron=?, food=?, repute=?, skillExp=?, leagueId=?, lastLogin=? WHERE id=?', [
+		this.name, this.gold, this.gem, this.wood, this.stone, this.iron, this.food, this.repute, this.skillExp, this.leagueId, this.lastLogin, this.id], function (err, res) {
+		if (err) {
+			console.error(err);
+		}
+		++count;
+		if (count >= total) {
+			cb(null, self);
+		}
+	});
+	//
+	for (let i in mgrSaveList) {
+		let mgr = mgrSaveList[i];
+		mgr.save(function(err, res) {
 			if (err) {
-				aux.log(null, err);
+				console.error(err);
 			}
-			mgr.register(function(err, res) {
-				if (err) {
-					aux.log(null, err);
-				}
-				++count;
-				if (count >= total) {
-					cb(null, self);
-				}
-			});
+			++count;
+			if (count >= total) {
+				cb(null, self);
+			}
 		});
 	}
 }
-
-// pro.save = function(cb) {
-// 	let self = this;
-// 	let total = this.mgrDict.getSize() + 1;
-// 	let count = 0;
-// 	//
-// 	MysqlExtend.query('UPDATE tbl_role SET rank=?, money=?, gem=?, lastLogin=? WHERE id=?', [this.rank, this.money, this.gem, this.lastLogin, this.id], function (err, res) {
-// 		if (err) {
-// 			console.error(err);
-// 		}
-// 		++count;
-// 		if (count >= total) {
-// 			cb(null, self);
-// 		}
-// 	});
-// 	//
-
-// 	let mgrDict = this.mgrDict.getRaw();
-// 	for ( let key in mgrDict ) {
-// 		this.getMgr(key, function(err, mgr) {
-// 			if (err) {
-// 				console.error(err);
-// 				++count;
-// 				if (count >= total) {
-// 					cb(null, self);
-// 				}
-// 				return;
-// 			}
-// 			mgr.save(function(err, res) {
-// 				if (err) {
-// 					console.error(err);
-// 				}
-// 				++count;
-// 				if (count >= total) {
-// 					cb(null, self);
-// 				}
-// 			});
-// 		});
-// 	}
-// }
 
 pro.load = function(cb) {
 	let self = this;
@@ -261,7 +249,7 @@ pro.load = function(cb) {
 				if ( err ) {
 					return cb(err);
 				}
-				self.afterLoad(cb);
+				self.afterAllLoad(cb);
 			});
 		}
 		else {
@@ -274,17 +262,45 @@ pro.load = function(cb) {
 					if ( err ) {
 						return cb(err);
 					}
-					self.afterLoad(cb);
+					self.afterAllLoad(cb);
 				});
 			});
 		}
 	});
 }
 
-// load之后执行，数据之间有依赖的放在此处（如：机器人之间有队伍组合加成）
-pro.afterLoad = function(cb) {
+// 
+pro.afterAllLoad = function(cb) {
+	let self = this;
+	//
+	aux.parallelEach(this.mgrDict, function(item, nextCb) {
+		if (item.obj == null) {
+			return nextCb();
+		}
+		item.obj.afterAllLoad(function(err) {
+			nextCb(err);
+		});
+	}, function(err) {
+		if (err) {
+			aux.log("after all load error", err);
+		}
+		self.loadLastProc(cb);
+	});
+}
+
+pro.loadLastProc = function(cb) {
+	let self = this;
 	this.lastLogin = Auxiliary.now();
-	cb(null, this);
+	this.getLandMgr(function(err, landMgr) {
+		if ( err ) {
+			return cb(err);
+		}
+		self.woodProduce  = landMgr.countWoodProduce(); // 根据建筑与地块计算总产量
+		self.stoneProduce = landMgr.countStoneProduce();
+		self.ironProduce  = landMgr.countIronProduce();
+		self.foodProduce  = landMgr.countFoodProduce();
+		cb(null, self);
+	});
 }
 
 pro.setOnline = function(cb) {
@@ -298,13 +314,9 @@ pro.setOnline = function(cb) {
 // 	cb();
 // }
 
-// pro.setFirst = function() {
-// 	this.first = false;
-// }
-
-// pro.destory = function(cb) {
-// 	cb();
-// }
+pro.destory = function(cb) {
+	cb();
+}
 
 pro.packLogin = function(cb) {
 	let self = this;
@@ -338,41 +350,25 @@ pro.packLogin = function(cb) {
 				return cb(err);
 			}
 			ret['castleData'] = castleMgr.pack();
-			cb(null, ret);
+			//
+			self.getLandMgr(function(err, landMgr) {
+				if ( err ) {
+					return cb(err);
+				}
+				ret['landData'] = landMgr.pack();
+				//
+				cb(null, ret);
+			});
 		});
 	});
-	// 缺乏仓库容量
-	// self.getRobotMgr(function(err, robotMgr) {
-	// 	if (err) {
-	// 		return cb(err);
-	// 	}
-	// 	ret.robotData = robotMgr.toData();
-	// 	self.getMissionMgr(function(err, missionMgr) {
-	// 		if (err) {
-	// 			return cb(err);
-	// 		}
-	// 		ret.missionData = missionMgr.toData();
-	// 		self.getItemMgr(function(err, itemMgr) {
-	// 			if (err) {
-	// 				return cb(err);
-	// 			}
-	// 			ret.itemData = itemMgr.toData();
-	// 			cb(null, ret);
-	// 		});
-	// 	});
-	// });
 }
 
 pro.stampLastUse = function() {
 	this.lastUse = aux.now();
 }
 
-// pro.setLastUse = function(value) {
-// 	this.lastUse = value;
-// }
-
-// pro.getLastUse = function() {
-// 	return this.lastUse;
-// }
+pro.getLastUse = function() {
+	return this.lastUse;
+}
 
 

@@ -27,12 +27,13 @@ function Application() {
 	let srvType = process.argv[3];
 	let port = process.argv[4];
 	let clientPort = process.argv[5];
+	//
 	createRpcServer(port, function(err, res) {
 		if (err) {
 			aux.error(null, "start rpc server error", err);
 			return;
 		}
-		aux.log(null, 'rpc server ['+ srvType +'] start listen', port);
+		aux.log('rpc server ['+ srvType +'] start listen', port);
 		// 
 		if ( clientPort != "undefined" ) {
 			createClientServer(clientPort, function(err, res) {
@@ -40,7 +41,7 @@ function Application() {
 					aux.error(null, "start rpc server error", err);
 					return;
 				}
-				aux.log(null, 'game server ['+ srvType +'] start listen', clientPort);
+				aux.log('game server ['+ srvType +'] start listen', clientPort);
 				process.send({ ins: instruct.START_SERVER_FINISH, srvId: App.srvId});
 			});
 		}
@@ -88,14 +89,15 @@ function Rpc() {
 Rpc.prototype.init = function() {
 	// 读取所有的handle和remote
 	let server = ServerMgr.getById(App.srvId);
+	this.readLifeCyc(server.getType());
 	this.readHandle(server.getType());
 	this.readRemote(server.getType());
-	this.readLifeCyc(server.getType());
 	// server端rpc调用
 	ServerMgr.regDispatch('web');
 	ServerMgr.regDispatch('connector');
 	ServerMgr.regDispatch('player');
 	ServerMgr.regDispatch('map');
+	ServerMgr.regDispatch('report');
 }
 
 Rpc.prototype.readHandle = function(srvType) {
@@ -196,7 +198,7 @@ function fitToServerHandle(clientSocket, session, buf, cmd) {
 // ======== 与master进行管道通讯 ========
 
 process.on('message', (msg) => {
-	// aux.log(null, 'CHILD got message:', msg);
+	// aux.log('CHILD got message:', msg);
 	switch (msg.ins) {
 		case instruct.STOP:
 			let lifeCyc = App.rpc.lifeCyc;
@@ -205,7 +207,7 @@ process.on('message', (msg) => {
 				process.exit(1)
 				return;
 			}
-			lifeCyc.beforeShutdown(App, function(err, res) {
+			lifeCyc.beforeShutdown(App, function(err) {
 				if (err) {
 					aux.error(null, "Close server error:", err);
 				}
@@ -217,26 +219,31 @@ process.on('message', (msg) => {
 			ServerMgr.fromData(msg.servers);
 			ServerMgr.setCurrentServer(App.srvId);
 			App.rpc.init();
-			ServerMgr.each(function(srv) {
-				if ( srv.id == App.srvId ) {
-					return;
+			afterStartup(App, function(err) {
+				if (err) {
+					aux.error(null, "Close server error:", err);
 				}
-				// 与其他socket创建连接
-				const ws = new WebSocket('ws://127.0.0.1:'+ srv.port);
-				ws.on('open', function() {
-					srv.setSocket(ws);
+				ServerMgr.each(function(srv) {
+					if ( srv.id == App.srvId ) {
+						return;
+					}
+					// 与其他socket创建连接
+					const ws = new WebSocket('ws://127.0.0.1:'+ srv.port);
+					ws.on('open', function() {
+						srv.setSocket(ws);
+					});
+					ws.on('message', function(msgStr) { // rpc handle/remote back receive
+						let msg = JSON.parse(msgStr);
+						let sysRpc = msg._sr;
+						delete(msg._sr);
+						App.rpc.runCb(sysRpc.cbId, msg);
+					});
 				});
-				ws.on('message', function(msgStr) { // rpc handle/remote back receive
-					let msg = JSON.parse(msgStr);
-					let sysRpc = msg._sr;
-					delete(msg._sr);
-					App.rpc.runCb(sysRpc.cbId, msg);
-				});
+				//
+				if (ServerMgr.getCurrentServer().type == "connector") {
+					App.SessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
+				}
 			});
-			//
-			if (ServerMgr.getCurrentServer().type == "connector") {
-				App.SessionMgr = require(ROOT_DIR +'lib/SessionMgr.js').getInst();
-			}
 			break;
 	}
 });
@@ -258,7 +265,7 @@ function createRpcServer(port, cb) {
 						break;
 				}
 			} catch (e) {
-				aux.log(null, 'rpc server ('+ port +') error:', e);
+				aux.log('rpc server ('+ port +') error:', e);
 			}
 		});
 	});
@@ -326,7 +333,7 @@ function createClientServer(port, cb) {
 		client.on('message', function(msgStr) {
 			try {
 				let msg = JSON.parse(msgStr);
-				aux.log(null, msg, protoTrans[msg.cmd]);
+				aux.log(msg, protoTrans[msg.cmd]);
 				//
 				if (App.SessionMgr != null) { // [connector]
 					if ( client.pid == null ) { // [connector] 直连，如：login
@@ -357,7 +364,7 @@ function createClientServer(port, cb) {
 					procHandle(msg, client);
 				}
 			} catch (e) {
-				aux.log(null, 'client [game] error:', e);
+				aux.log('client [game] error:', e);
 			}
 		});
 	});
@@ -365,11 +372,11 @@ function createClientServer(port, cb) {
 }
 
 process.on('exit', (code) => {
-	aux.log(null, `Child exited with code ${code}`);
+	aux.log(`Child exited with code ${code}`);
 });
 
 process.on('close', (code, signal) => {
-	aux.log(null, `child process terminated due to receipt of signal ${signal}`);
+	aux.log(`child process terminated due to receipt of signal ${signal}`);
 });
 
 
@@ -387,3 +394,13 @@ global.aux         = global.Auxiliary;
 App.Proto = require(ROOT_DIR +'model/network/Proto').getDict();
 
 // ============================================================================================================================
+
+
+
+function afterStartup(app, cb) {
+	let lifeCyc = app.rpc.lifeCyc;
+	if (lifeCyc == null || lifeCyc.afterStartup == null) {
+		return cb();
+	}
+	lifeCyc.afterStartup(app, cb);
+}

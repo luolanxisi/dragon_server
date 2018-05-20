@@ -59,7 +59,6 @@ pro.register = function(cb) {
 }
 
 // save在DbPackEntity中实现
-
 pro.load = function(cb) {
 	let self = this;
 	MysqlExtend.query('SELECT castleData FROM tbl_player WHERE id=? LIMIT 1', [this.pid], function (err, res) {
@@ -69,11 +68,23 @@ pro.load = function(cb) {
 		if (res.length <= 0) {
 			return cb();
 		}
-		cb();
+		let castleData = JSON.parse(res[0].castleData);
+		if (castleData == null) { // register
+			self.register(cb);
+		}
+		else {
+			let castleList = castleData.castles;
+			for (let i in castleList) {
+				let data = castleList[i];
+				let castle = Castle.createLoad(data);
+				self.pool.resume(castle);
+			}
+			cb();
+		}
 	});
 }
 
-pro.afterLoad = function(cb) {
+pro.afterAllLoad = function(cb) {
 	cb();
 }
 
@@ -89,7 +100,6 @@ pro.destory = function(cb) {
 	cb();
 }
 
-
 pro.pack = function() {
 	let arr = [];
 	this.pool.each(function(castle) {
@@ -102,14 +112,7 @@ pro.pack = function() {
 }
 
 pro.toData = function() {
-	let arr = [];
-	this.pool.each(function(castle) {
-		arr.push(castle.pack());
-	});
-	let ret = {
-		castles : arr
-	};
-	return ret;
+	return this.pack();
 }
 
 

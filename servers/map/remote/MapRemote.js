@@ -46,23 +46,25 @@ pro.attackTile = function(msg, cb) {
 			}, aux.logError);
 			return;
 		}
-		//
+		// 最终实现时还有一个驻守问题
 		let para = {
-			pid    : pid,
+			atkPid : pid,
+			defPid : 0, // 0=npc，最终实现进攻的可能是其他玩家地块
 			teamId : teamId,
 			guardCfgId : aux.randomRange(1, 8),
 			costSec : costSec,
 			tileX : endX,
-			tileY : endY
+			tileY : endY,
+			battleTime : aux.now()
 		};
 		App.callRemote("player.BattleRemote.battleCalc", pid, para, function(err, res) {
 			if (err) {
-				return aux.log(null, err);
+				return aux.log(err);
 			}
 			let retMsg = res.data;
 			switch ( retMsg.result ) {
 				case Battle.RESULT_SUCC: // 占领
-					tile.occupy(pid);
+					mapCmgr.occupyTile(tile, pid); // 更新tileMap
 					break;
 				case Battle.RESULT_FAIL: // 失败
 					break;
@@ -73,6 +75,12 @@ pro.attackTile = function(msg, cb) {
 	}, costSec * 1000);
 	//
 	cb(null, {costSec:costSec});
+}
+
+pro.fetchPlayerTile = function(msg, cb) {
+	let pid = msg.pid;
+	let tileList = mapCmgr.fetchPlayerTile(pid);
+	cb(null, {tileList:tileList});
 }
 
 

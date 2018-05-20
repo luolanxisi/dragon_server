@@ -2,13 +2,17 @@
 
 const net = require('net');
 const readline = require('readline');
+const WebSocket = require('ws');
 
 global.ROOT_DIR = __dirname +"/";
 
 const masterCfg = require(ROOT_DIR +'config/master_config.json');
 
 
-const client = net.createConnection({host:"localhost", port:masterCfg.port}, () => {
+
+
+const ws = new WebSocket('ws://127.0.0.1:'+ masterCfg.port);
+ws.on('open', function() {
 	console.error("connenct to server:", masterCfg.port);
 
 	const rl = readline.createInterface({
@@ -21,23 +25,13 @@ const client = net.createConnection({host:"localhost", port:masterCfg.port}, () 
 		switch (input) {
 			case 'stop':
 				console.error('close server');
-				client.write("stop");
+				ws.send("stop");
 				break;
 		}
 	});
 });
-
-
-client.on('data', (data) => {
-
-});
-
-client.on('end', () => {
-
-});
-
-client.on('error', (err) => {
-
+ws.on('message', function(msgStr) { // rpc handle/remote back receive
+	console.log(msgStr);
 });
 
 

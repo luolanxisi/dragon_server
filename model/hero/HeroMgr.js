@@ -58,17 +58,17 @@ pro.load = function(cb) {
 		if (res.length <= 0) {
 			return cb();
 		}
-	// 	let obj = JSON.parse(res[0].heroData);
-	// 	for (let i in obj.heroes) {
-	// 		let heroData = obj.heroes[i];
-	// 		let hero = Hero.createLoad(heroData);
-	// 		self.pool.add(hero.getId(), hero);
-	// 	}
-		cb();
+		let heroData = JSON.parse(res[0].heroData);
+		if (heroData == null) { // register
+			self.register(cb);
+		}
+		else {
+			cb();
+		}
 	});
 }
 
-pro.afterLoad = function(cb) {
+pro.afterAllLoad = function(cb) {
 	cb();
 }
 

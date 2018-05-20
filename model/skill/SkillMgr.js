@@ -58,7 +58,7 @@ pro.load = function(cb) {
 	});
 }
 
-pro.afterLoad = function(cb) {
+pro.afterAllLoad = function(cb) {
 	cb();
 }
 

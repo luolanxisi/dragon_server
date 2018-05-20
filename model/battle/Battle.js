@@ -6,7 +6,14 @@ const Hero     = require(ROOT_DIR +'model/hero/Hero');
 
 module.exports = Battle;
 
-function Battle(attackTeam, defendTeam) {
+function Battle(atkPid, defPid, attackTeam, defendTeam, tileX, tileY, teamId, battleTime) {
+	this.atkPid = atkPid;
+	this.defPid = defPid;
+	this.teamId = teamId;
+	this.tileX = tileX;
+	this.tileY = tileY;
+	this.battleTime = battleTime;
+	//
 	this.currentTurn = 0;
 	this.winTeam = 0; // 0代表平局
 	this.originAttackTeam = attackTeam;
@@ -18,6 +25,9 @@ function Battle(attackTeam, defendTeam) {
 	for (let i=0; i<Battle.TOTAL_TURN; ++i) {
 		this.actionData.push([]);
 	}
+	//
+	this.atkTotalArmy = countTotalArmy(this.attackTeam);
+	this.defTotalArmy = countTotalArmy(this.defendTeam);
 }
 
 const pro = Battle.prototype;
@@ -233,7 +243,8 @@ pro.getAttackRemain = function() {
 pro.packServerData = function() {
 	let result = this.getAttackResult();
 	let ret = {
-		result : result
+		result     : result,
+		occupyTime : this.battleTime
 	};
 	if (result == Battle.RESULT_DRAW) {
 		ret["remainArmies"] = extractRemainArmy(this.defendTeam);
@@ -241,18 +252,60 @@ pro.packServerData = function() {
 	return ret;
 }
 
-pro.packClientData = function(tileX, tileY) {
+pro.packClientData = function() {
 	let result = this.getAttackResult();
 	let ret = {
 		result : result,
-		tileX  : tileX,
-		tileY  : tileY,
+		tileX  : this.tileX,
+		tileY  : this.tileY,
+		occupyTime : this.battleTime,
 		attackTeam : this.originAttackTeam,
 		defendTeam : this.originDefendTeam,
 		actionData : this.actionData.slice(0, this.currentTurn)
 	};
 	return ret;
 }
+
+pro.packReportData = function() {
+	let result = this.getAttackResult();
+	let atkLeaderData = this.originAttackTeam[0];
+	let defLeaderData = this.originDefendTeam[0];
+	let atkInfo = {
+		cfgId : atkLeaderData.cfgId,
+		level : atkLeaderData.level,
+		totalArmy : this.atkTotalArmy
+	};
+	let defInfo = {
+		cfgId : defLeaderData.cfgId,
+		level : defLeaderData.level,
+		totalArmy : this.defTotalArmy
+	};
+	//
+	let ret = {
+		atkPid   : this.atkPid,
+		defPid   : this.defPid,
+		baseInfo : {
+			result : result,
+			tileX  : this.tileX,
+			tileY  : this.tileY,
+			atkInfo : atkInfo,
+			defInfo : defInfo
+		},
+		teamId     : this.teamId,
+		groupTime  : this.battleTime, // 实际时间并非这个（多次战斗情况）
+		battleData : {
+			attackTeam : this.originAttackTeam,
+			defendTeam : this.originDefendTeam,
+			actionData : this.actionData.slice(0, this.currentTurn)
+		}
+	};
+	return ret;
+}
+
+pro.getOccupyTime = function() {
+	return this.battleTime;
+}
+
 
 function extractRemainArmy(list) {
 	let arr = [];
@@ -280,7 +333,7 @@ function findEnemyTargets(range, num, enemies) {
 	}
 	else {
 		let optionList = cloneInRange(range, enemies);
-		shuffleAlgorithm(optionList);
+		aux.shuffleAlgorithm(optionList);
 		if (optionList.length <= num) {
 			return optionList;
 		}
@@ -312,16 +365,6 @@ function cloneInRange(range, list) {
 	return arr;
 }
 
-function shuffleAlgorithm(list) {
-	let size = list.length;
-	for (let i=0; i<size; ++i) {
-		let randVal = aux.randomRange(0, size);
-		let temp = list[i];
-		list[i] = list[randVal];
-		list[randVal] = temp;
-	}
-}
-
 function cloneNotNull(list) {
 	let ret = [];
 	for (let i in list) {
@@ -341,3 +384,11 @@ function getEnemyFlag(hero) {
 	}
 }
 
+function countTotalArmy(team) {
+	let total = 0;
+	for (let i in team) {
+		let hero = team[i];
+		total += hero.army;
+	}
+	return total;
+}

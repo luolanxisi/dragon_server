@@ -7,7 +7,7 @@ const playerMgr = new PlayerMgr();
 
 module.exports.getInst = function() {
 	if (ServerMgr.getCurrentServer().type != "player") {
-		aux.log(null, "Use player mgr not in player process !!");
+		aux.log("Use player mgr not in player process !!");
 		return;
 	}
 	return playerMgr;
@@ -15,18 +15,21 @@ module.exports.getInst = function() {
 
 function PlayerMgr() {
 	let self = this;
+	this.saveLock = false;
+	this.saveWaitList = [];
+	//
 	this.pool = new Dict();
 	this.waitQueueDict = {};
 	this.tickId = setInterval(function() {
 		try {
 			self.save(function() {
 				let server = ServerMgr.getCurrentServer();
-				console.log("save end >>>>>>", server.getType(), server.getId());
+				aux.log("save end >>>>>>", server.getType(), server.getId());
 			});
 		} catch (e) {
-			console.log("Save tick error:", e);
+			aux.log("Save tick error:", e);
 		}		
-	}, 300 * 1000);
+	}, 3600 * 1000);
 }
 
 const pro = PlayerMgr.prototype;
@@ -66,8 +69,23 @@ pro.remove = function(pid, cb) {
 	cb();
 }
 
-// 定时保存
+
 pro.save = function(cb) {
+	if ( this.saveLock ) {
+		this.saveWaitList.push(cb);
+		return;
+	}
+	this.saveLock = true;
+	let self = this;
+	this.saveDb(function(err) {
+		self.saveLock = false;
+		cb(err);
+		aux.cbAll(self.saveWaitList, [err]);
+	});
+}
+
+// 定时保存
+pro.saveDb = function(cb) {
 	let self = this;
 	let now = Auxiliary.now();
 	let size = this.pool.getSize();
@@ -75,13 +93,13 @@ pro.save = function(cb) {
 	if (this.pool.getSize() <= 0) {
 		return cb();
 	}
-	let roles = this.pool.getRaw();
-	for (let i in roles) {
-		let role = roles[i];
-		role.save(function(err) {
-			self.checkGc(role, now);
+	let players = this.pool.getRaw();
+	for (let i in players) {
+		let player = players[i];
+		player.save(function(err) {
+			self.checkGc(player, now);
 			if (err) {
-				console.error("save role fail!!", err);
+				aux.error("save player fail!!", err);
 			}
 			++count;
 			if (count >= size) {
@@ -91,24 +109,22 @@ pro.save = function(cb) {
 	}
 }
 
-pro.checkGc = function(role, now) {
-	if ( now - role.getLastUse() > 300 ) { // 300
-		this.remove(role.getId(), Auxiliary.normalCb);
-		role.destory(Auxiliary.normalCb);
+pro.checkGc = function(player, now) {
+	if ( now - player.getLastUse() > 300 ) { // 300
+		this.remove(player.getId(), Auxiliary.normalCb);
+		player.destory(Auxiliary.normalCb);
 	}
 }
 
 pro.destory = function(cb) {
 	clearInterval(this.tickId);
-	try {
-		this.save(function() {
-			let server = ServerMgr.getCurrentServer();
-			console.log("Close save end >>>>>>", server.getType(), server.getId());
-		});
-	} catch (e) {
-		console.log("Close save error:", e);
-	} finally {
+	this.save(function(err) {
+		if (err) {
+			aux.log("playerMgr destory", err);
+		}
+		let server = ServerMgr.getCurrentServer();
+		aux.log("Close save end >>>>>>", server.getType(), server.getId());
 		cb();
-	}
+	});
 }
 

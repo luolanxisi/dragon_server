@@ -16,7 +16,10 @@ const dict = {
 	HERO_HIRE : 200,
 	HERO_MAKE_TEAM : 201,
 	// 战斗协议
-	BATTLE_RESULT : 300 // 派发战斗结果
+	BATTLE_RESULT : 300, // 派发战斗结果
+	// 战报协议
+	REPORT_FETCH_LIST : 400,
+	REPORT_FETCH_DATA : 401
 };
 
 exports.getDict = function() {
@@ -38,6 +41,9 @@ transDict[dict.MAP_TRAIN]       = "player.MapHandle.MAP_TRAIN";
 //
 transDict[dict.HERO_HIRE]      = "player.HeroHandle.HERO_HIRE";
 transDict[dict.HERO_MAKE_TEAM] = "player.HeroHandle.HERO_MAKE_TEAM";
+//
+transDict[dict.REPORT_FETCH_LIST] = "report.ReportHandle.REPORT_FETCH_LIST";
+transDict[dict.REPORT_FETCH_DATA] = "report.ReportHandle.REPORT_FETCH_DATA";
 
 
 exports.getTransDict = function() {

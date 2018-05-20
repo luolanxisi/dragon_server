@@ -17,7 +17,7 @@ pro.WEB_TICKET = function(_null, msg, cb) {
 	//
 	MysqlExtend.query('SELECT pid FROM tbl_platform WHERE id=? LIMIT 1', [platformId], function (err, res) {
 		if (err) {
-			aux.log(null, err);
+			aux.log(err);
 			return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
 		}
 		if ( res.length == 0 ) { // 新建账号
@@ -25,13 +25,13 @@ pro.WEB_TICKET = function(_null, msg, cb) {
 			let name = 'Guest#'+aux.randomRange(1000, 9999);
 			MysqlExtend.query("INSERT INTO tbl_player(name, regTime, lastLogin) VALUES(?, ?, ?)", [name, regTime, regTime], function (err, res) {
 				if (err) {
-					aux.log(null, err);
+					aux.log(err);
 					return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
 				}
 				let pid = res.insertId;
 				MysqlExtend.query('INSERT INTO tbl_platform(id, pid) VALUES(?, ?)', [platformId, pid], function (err, res) {
 					if (err) {
-						aux.log(null, err);
+						aux.log(err);
 						return cb(Auxiliary.createError(ErrorCode.CREATE_ROLE), null, true);
 					}
 					loginSucc(pid, ticket, cb);

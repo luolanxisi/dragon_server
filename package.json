@@ -5,9 +5,8 @@
   "dependencies": {
     "mysql": "=2.13.0",
     "rbtree": "=0.3.0",
-    "sqlite3": "=3.1.8",
+    "sqlite3": "=4.0.0",
     "ws": "=5.1.0",
-    "quadtree-lib": "=1.0.9",
-    "iconv": "=2.3.0"
+    "quadtree-lib": "=1.0.9"
   }
 }

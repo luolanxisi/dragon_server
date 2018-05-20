@@ -64,67 +64,27 @@ pro.regMessage = function(child, port) {
 	});
 }
 
-// // 与控制台通讯接口
-// const server = net.createServer((client) => {
-// 	aux.log('client connected');
-
-// 	client.on('end', () => {
-// 		aux.log('client disconnected');
-// 	});
-
-// 	client.on('error', (err) => {
-// 		aux.log('client error:', err);
-// 	});
-
-// 	client.on('data', (data) => {
-// 		try {
-// 			switch (data.toString()) {
-// 				case 'stop':
-// 					for (let i in master.srvDict) {
-// 						let srv = master.srvDict[i];
-// 						aux.log('stop port:', i);
-// 						srv.send({ins: instruct.STOP});
-// 						// srv.kill('SIGHUP');
-// 					}
-// 					break;
-// 			}
-// 		} catch (e) {
-// 			aux.log(e);
-// 		}
-// 	});
-
-// 	//client.setNoDelay(true);
-// });
-
-// server.on('error', (err) => {
-// 	aux.log('master server error:', err);
-// });
-
-// server.listen(masterCfg.port, () => {
-// 	aux.log('master start listen', masterCfg.port);
-// });
-
 const ws = new WebSocket.Server({ port: masterCfg.port });
 ws.on('connection', function(client, req) {
-	aux.log(null, 'console admin connected');
+	aux.log('console admin connected');
 	//
 	client.on('message', function(msgStr) {
 		try {
 			switch (msgStr) {
 				case 'stop':
 					for (let i in master.srvDict) {
-						aux.log(null, 'stop port:', i);
+						aux.log('stop port:', i);
 						let srv = master.srvDict[i];
 						srv.send({ins: instruct.STOP});
 					}
 					break;
 			}
 		} catch (e) {
-			aux.log(null, 'master server error:', e);
+			aux.log('master server error:', e);
 		}
 	});
 });
-aux.log(null, 'master start listen', masterCfg.port);
+aux.log('master start listen', masterCfg.port);
 
 
 process.on('close', (code, signal) => {
