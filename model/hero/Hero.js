@@ -1,6 +1,10 @@
 "use strict";
 
-const HeroCfg = require(ROOT_DIR +'data/HeroCfg.json');
+const HeroCfg      = require(ROOT_DIR +'data/HeroCfg.json');
+const HeroLevelCfg = require(ROOT_DIR +'data/HeroLevelCfg.json');
+
+
+const MAX_LEVEL = 50;
 
 
 module.exports.createInit = function(cfgId, level) {
@@ -26,7 +30,7 @@ function Hero() {
 	this.stamina = 100; // 体力（需要时间戳）
 	this.grade   = 0; // 阶级
 	this.points  = new Array(0,0,0,0,0); // 配点
-	this.skills  = new Array(null, null, null);
+	this.skills  = new Array({cfgId:0, level:0}, {cfgId:0, level:0}, {cfgId:0, level:0});
 	this.cfg     = null;
 	//
 	this.phyAtt = 0;
@@ -88,6 +92,26 @@ pro.cureArmy = function() {
 	}
 }
 
+pro.plusExp = function(value) {
+	if (this.level >= MAX_LEVEL) {
+		return;
+	}
+	this.exp += value || 0;
+	let upNeedExp = HeroLevelCfg[this.level];
+	//
+	while (this.exp >= upNeedExp) {
+		this.level++;
+		if (this.level == MAX_LEVEL) {
+			this.exp = upNeedExp;
+			break;
+		}
+		else {
+			this.exp -= upNeedExp;
+			upNeedExp = HeroLevelCfg[this.level];
+		}
+	}
+}
+
 pro.hasSkill = function(cfgId) {
 }
 
@@ -110,14 +134,18 @@ pro.init = function(cfg, level) {
 	this.magDef = cfg.magDef + (level-1)*cfg.magDefUp;
 	this.speed  = cfg.speed  + (level-1)*cfg.speedUp;
 	// 初始化第一个技能
+	let skillData = this.skills[0];
+	skillData.cfgId = cfg.baseSkill;
+	skillData.level = 1;
 }
 
 pro.load = function(data) {
+	let level = data.level;
 	let cfg = HeroCfg[data.cfgId];
 	this.cfg = cfg;
 	//
-	this.id = data.id;
-	this.level = level;
+	this.id     = data.id;
+	this.level  = level;
 	this.phyAtt = cfg.phyAtt + (level-1)*cfg.phyAttUp;
 	this.phyDef = cfg.phyDef + (level-1)*cfg.phyDefUp;
 	this.magAtt = cfg.magAtt + (level-1)*cfg.magAttUp;
@@ -129,6 +157,8 @@ pro.load = function(data) {
 	this.stamina = data.stamina;
 	this.grade   = data.grade;
 	// points, skills
+	this.points  = data.points;
+	this.skills = data.skills;
 }
 
 pro.pack = function() {

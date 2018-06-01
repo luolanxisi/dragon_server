@@ -55,16 +55,14 @@ pro.load = function(cb) {
 		if (err) {
 			return cb(err);
 		}
-		if (res.length <= 0) {
-			return cb();
-		}
 		let heroData = JSON.parse(res[0].heroData);
-		if (heroData == null) { // register
-			self.register(cb);
+		if (heroData != null) {
+			let heroes = heroData.heroes;
+			for (let i in heroes) {
+				self.pool.resume(Hero.createLoad(heroes[i]));
+			}
 		}
-		else {
-			cb();
-		}
+		cb();
 	});
 }
 

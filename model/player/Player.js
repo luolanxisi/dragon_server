@@ -13,6 +13,8 @@ const SKILL_MGR = 2; // 技能
 const CASTLE_MGR = 3; // 城池
 const TASK_MGR = 4; // 任务
 
+const RES_ADD_INV = 60; // 资源1分钟加一次
+
 module.exports = Player;
 
 function Player(id) {
@@ -30,6 +32,7 @@ function Player(id) {
 	this.stoneProduce = 1000;
 	this.ironProduce  = 1000;
 	this.foodProduce  = 1000;
+	this.lastHarvest = 0; // 使用资源、登录时计算
 	//
 	this.storeMax = 20000; // 根据仓库计算容量
 	//
@@ -40,13 +43,6 @@ function Player(id) {
 	this.leagueName = null; // 登录读取
 	//
 	this.skillExp = 200;
-	//
-	// this.mgrDict = new Dict();
-	// this.mgrDict.add(LAND_MGR,   {class:LandMgr,   obj:null, waitQueue:[]});
-	// this.mgrDict.add(HERO_MGR,   {class:HeroMgr,   obj:null, waitQueue:[]});
-	// this.mgrDict.add(SKILL_MGR,  {class:SkillMgr,  obj:null, waitQueue:[]});
-	// this.mgrDict.add(CASTLE_MGR, {class:CastleMgr, obj:null, waitQueue:[]});
-	// this.mgrDict.add(TASK_MGR,   {class:TaskMgr,   obj:null, waitQueue:[]});
 	//
 	this.mgrDict = [];
 	this.mgrDict.push({class:LandMgr,   obj:null, waitQueue:[]});
@@ -194,8 +190,8 @@ pro.save = function(cb) {
 	let total = mgrSaveList.length + 1;
 	let count = 0;
 	//
-	MysqlExtend.query('UPDATE tbl_player SET name=?, gold=?, gem=?, wood=?, stone=?, iron=?, food=?, repute=?, skillExp=?, leagueId=?, lastLogin=? WHERE id=?', [
-		this.name, this.gold, this.gem, this.wood, this.stone, this.iron, this.food, this.repute, this.skillExp, this.leagueId, this.lastLogin, this.id], function (err, res) {
+	MysqlExtend.query('UPDATE tbl_player SET name=?, gold=?, gem=?, wood=?, stone=?, iron=?, food=?, lastHarvest=?, repute=?, skillExp=?, leagueId=?, lastLogin=? WHERE id=?', [
+		this.name, this.gold, this.gem, this.wood, this.stone, this.iron, this.food, this.lastHarvest, this.repute, this.skillExp, this.leagueId, this.lastLogin, this.id], function (err, res) {
 		if (err) {
 			console.error(err);
 		}
@@ -221,7 +217,7 @@ pro.save = function(cb) {
 
 pro.load = function(cb) {
 	let self = this;
-	MysqlExtend.query('SELECT name, gold, gem, wood, stone, iron, food, repute, skillExp, leagueId, regTime, lastLogin FROM tbl_player WHERE id=? LIMIT 1', [this.id], function (err, res) {
+	MysqlExtend.query('SELECT name, gold, gem, wood, stone, iron, food, lastHarvest, repute, skillExp, leagueId, regTime, lastLogin FROM tbl_player WHERE id=? LIMIT 1', [this.id], function (err, res) {
 		if (err) {
 			return cb(err);
 		}
@@ -240,6 +236,7 @@ pro.load = function(cb) {
 		self.repute   = row.repute || 0;
 		self.skillExp = row.skillExp || 0;
 		self.leagueId = row.leagueId || 0;
+		self.lastHarvest = row.lastHarvest || aux.now();
 		// 需要计算离线收入
 		self.regTime   = row.regTime || 0;
 		self.lastLogin = row.lastLogin || 0;
@@ -290,7 +287,7 @@ pro.afterAllLoad = function(cb) {
 
 pro.loadLastProc = function(cb) {
 	let self = this;
-	this.lastLogin = Auxiliary.now();
+	this.lastLogin = aux.now();
 	this.getLandMgr(function(err, landMgr) {
 		if ( err ) {
 			return cb(err);
@@ -299,6 +296,17 @@ pro.loadLastProc = function(cb) {
 		self.stoneProduce = landMgr.countStoneProduce();
 		self.ironProduce  = landMgr.countIronProduce();
 		self.foodProduce  = landMgr.countFoodProduce();
+		//
+		let now = aux.now();
+		let diffSec = now - self.lastHarvest;
+		let leftSec = diffSec % RES_ADD_INV; // 不够1分钟部分
+		let minTimes = Math.floor(diffSec / RES_ADD_INV);
+		self.wood  = Math.min(self.wood + self.woodProduce * minTimes, self.storeMax);
+		self.stone = Math.min(self.stone + self.stoneProduce * minTimes, self.storeMax);
+		self.iron  = Math.min(self.iron + self.ironProduce * minTimes, self.storeMax);
+		self.food  = Math.min(self.food + self.foodProduce * minTimes, self.storeMax);
+		//
+		self.lastHarvest = now - leftSec;
 		cb(null, self);
 	});
 }

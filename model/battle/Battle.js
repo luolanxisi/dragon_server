@@ -47,11 +47,13 @@ Battle.playerFormTeam = function(heroMgr, team, flag) {
 	let arr = [];
 	let size = team.getSize();
 	for (let i=0; i<size; ++i) {
-		let heroId = team.get(i+1);
+		let pos = i + 1;
+		let heroId = team.get(pos);
 		let hero = heroMgr.get(heroId);
 		if (hero != null) {
 			let heroData = hero.cloneBattleData();
 			heroData.flag = flag;
+			heroData.pos = pos;
 			arr.push(heroData);
 		}
 		else {
@@ -69,6 +71,7 @@ Battle.guardFormTeam = function(guardId, flag) {
 		let hero = Hero.createInit(heroCfg.cfgId, cfg.heroLevel);
 		let heroData = hero.cloneBattleData();
 		heroData.id = parseInt(i) + 1;
+		heroData.pos = heroData.id;
 		heroData.flag = flag;
 		heroData.army = cfg.army;
 		arr.push(heroData);
@@ -159,8 +162,10 @@ pro.normalAttack = function(hero, enemies) {
 	let realityDamage = this.minusDamage(targetHero, damage);
 	let actionData = [
 		1, // 普攻
-		hero.id,
-		targetHero.id,
+		hero.flag,
+		hero.pos,
+		targetHero.flag,
+		targetHero.pos,
 		realityDamage
 	];
 	this.addAction(actionData);

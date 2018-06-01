@@ -210,6 +210,9 @@ pro.load = function(cb) {
 				for (let j=0; j<size; ++j) {
 					let tile = line[j];
 					tile.fromBuffer(exbuffer);
+					if (tile.pid != 0) {
+						self.addBelongTile(tile);
+					}
 				}
 				nextCb();
 			});

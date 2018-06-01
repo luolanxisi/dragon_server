@@ -30,7 +30,7 @@ pro.fill = function(heroIds) {
 	}
 }
 
-pro.pack = function(heroIds) {
+pro.pack = function() {
 	return this.pool;
 }
 

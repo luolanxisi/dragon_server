@@ -9,6 +9,7 @@ const aux = require("../../lib/Auxiliary");
 const DATA_LAND_CFG = "../../../dragon_config/LandCfg.csv";
 const DATA_HERO_CFG = "../../../dragon_config/HeroCfg.csv";
 const DATA_GUARD_CFG = "../../../dragon_config/GuardCfg.csv";
+const DATA_HERO_LEVEL_CFG = "../../../dragon_config/HeroLevelCfg.csv";
 
 const allNameDict = {}; // 文件表
 const allIdxDict = {};  // 各文件字段索引表
@@ -123,7 +124,8 @@ allNameDict[DATA_HERO_CFG] = {
 	'magDefUp' : {type:'float'}, // 
 	'speedUp'  : {type:'float'}, // 
 	'cost'   : {type:'float'}, // 
-	'range'  : {type:'int'}  // 
+	'range'  : {type:'int'},  // 
+	'baseSkill'  : {type:'int'}  // 
 };
 
 allProcDict[DATA_HERO_CFG] = function(data) {
@@ -190,6 +192,29 @@ allProcDict[DATA_GUARD_CFG] = function(data) {
 	}
 	//
 	fs.open('../../data/GuardCfg.json', 'w', (err, fd) => {
+		if (err) {
+			console.error(err);
+			return;
+		}
+		fs.write(fd, JSON.stringify(data));
+	});
+};
+
+// 英雄等级配置表
+allNameDict[DATA_HERO_LEVEL_CFG] = {
+	'id' : {type:'int'}, // 
+	'exp'   : {type:'int'}  // 
+};
+
+allProcDict[DATA_HERO_LEVEL_CFG] = function(data) {
+	aux.log(data);
+	let arr = [];
+	for (let i in data) {
+		let cfg = data[i];
+		arr.push(cfg.exp);
+	}
+	data = arr;
+	fs.open('../../data/HeroLevelCfg.json', 'w', (err, fd) => {
 		if (err) {
 			console.error(err);
 			return;

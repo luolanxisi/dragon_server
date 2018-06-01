@@ -17,6 +17,7 @@ CREATE TABLE `tbl_player` (
   `stone` int(11) not null DEFAULT 0 COMMENT '石料',
   `iron` int(11) not null DEFAULT 0 COMMENT '铁矿',
   `food` int(11) not null DEFAULT 0 COMMENT '粮草',
+  `lastHarvest` int(11) not null DEFAULT 0 COMMENT '最后计算收入时间',
   `repute` int(11) not null DEFAULT 0 COMMENT '声望',
   `skillExp` int(11) not null DEFAULT 0 COMMENT '技能经验',
   `leagueId` int(11) not null DEFAULT 0 COMMENT '联盟id',
